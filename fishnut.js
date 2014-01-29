@@ -191,8 +191,8 @@ Entity.prototype.rotateAndCache = function (image, angle) {
 // Fisher and Nutters code here
 // Fisher and Nutters Animation code below
 
-function Renderer(genome) {
-    this.genome = genome;
+function Renderer(pop) {
+    this.population = pop;
 
     Entity.call(this, null, 0, 0);
 }
@@ -201,9 +201,58 @@ Renderer.prototype = new Entity();
 Renderer.prototype.constructor = Renderer;
 
 Renderer.prototype.update = function () {
-    this.genome.mutate(5);
+    this.population.day();
     
     Entity.prototype.update.call(this);
+}
+
+Renderer.prototype.drawGeneplex = function (ctx, gp, x, y) {
+    var offset = 0;
+    //console.log(gp);
+    for (var j = 0; j < gp.genes.length; j++) {
+        ctx.beginPath();
+        ctx.strokeStyle = gp.genes[j].reward() === 3 ? "yellow" : gp.genes[j].reward() === 2 ? "lightblue" : "grey";
+        ctx.rect(x + offset, y, 14 * gp.genes[j].cost(), 4);
+        //console.log("Gene " + j + " Cost " + gp.genes[j].cost() + " Game " + gp.genes[j].minigame.perm.perm + " Attempt " + gp.genes[j].perm.perm);
+        ctx.stroke();
+        offset += 14 * gp.genes[j].cost();
+    }
+
+}
+
+Renderer.prototype.drawGenome = function (ctx, genome, x, y) {
+
+    ctx.beginPath();
+    ctx.strokeStyle = "pink";
+    ctx.rect(x, y, 1, 1 * genome.lengthmax);
+    ctx.stroke();
+
+    for (var i = 0; i < genome.geneplexes.length; i++) {
+        var gp = genome.geneplexes[i];
+        var offset = 0;
+
+        ctx.beginPath();
+        ctx.strokeStyle = "lightblue";
+        ctx.rect(x + 14 + i * 13, y, 1, 1 * gp.fitness());
+        ctx.stroke();
+
+        for (var j = 0; j < gp.genes.length; j++) {
+            ctx.beginPath();
+            ctx.strokeStyle = gp.genes[j].reward() === 3 ? "yellow" : gp.genes[j].reward() === 2 ? "lightblue" : "grey";
+            ctx.rect(x + 10 + i * 13, y + offset, 2, 1 * gp.genes[j].cost());
+            //console.log("Gene " + j + " Cost " + gp.genes[j].cost() + " Game " + gp.genes[j].minigame.perm.perm + " Attempt " + gp.genes[j].perm.perm);
+            ctx.stroke();
+            offset += 1 * gp.genes[j].cost();
+        }
+    }
+    genome.minmax(1);
+    this.drawGeneplex(ctx,genome.mins[0], x, y + 53)
+    this.drawGeneplex(ctx,genome.maxs[0], x, y + 60);
+}
+
+Renderer.prototype.drawAgent = function (ctx, agent, x, y) {
+    this.drawGenome(ctx, agent.genome, x, y);
+    this.drawGenome(ctx, agent.memome, x, y + 70);
 }
 
 Renderer.prototype.draw = function (ctx) {
@@ -211,41 +260,19 @@ Renderer.prototype.draw = function (ctx) {
     // draw genome
     ctx.font = "18px Arial";
     ctx.fillStyle = "pink";
-    ctx.fillText("Generation " + this.genome.generation, 10, 150);
-    ctx.fillText("Min Fitness " + this.genome.minfitness, 10, 170);
-    ctx.fillText("Max Fitness " + this.genome.maxfitness, 10, 190);
-    ctx.fillText("Geneplexes " + this.genome.geneplexes.length, 10, 220);
-    ctx.fillText("Geneplex Length " + this.genome.lengthmax, 10, 240);
+    ctx.fillText("Day " + this.population.days, 710, 150);
+    ctx.fillText("Min " + this.population.agents[0].memome.mins[0].fitness(), 710, 170);
+    ctx.fillText("Max " + this.population.agents[0].memome.maxs[0].fitness(), 710, 190);
 
-    ctx.beginPath();
-    ctx.strokeStyle = "pink";
-    ctx.rect(10, 10, 1, 2 * this.genome.lengthmax);
-    ctx.stroke();
-
-    for (var i = 0; i < this.genome.geneplexes.length; i++) {
-        var gp = this.genome.geneplexes[i];
-        var offset = 0;
-
-        ctx.beginPath();
-        ctx.strokeStyle = "lightblue";
-        ctx.rect(29 + i * 15, 10, 1, 2 * gp.fitness());
-        ctx.stroke();
-
-        for (var j = 0; j < gp.genes.length; j++) {
-            ctx.beginPath();
-            ctx.strokeStyle = gp.genes[j].reward() === 3 ? "yellow" : gp.genes[j].reward() === 2 ? "green" : "grey";
-            ctx.rect(20 + i * 15, 10 + offset, 4, 2 * gp.genes[j].cost());
-            //console.log("Gene " + j + " Cost " + gp.genes[j].cost() + " Game " + gp.genes[j].minigame.perm.perm + " Attempt " + gp.genes[j].perm.perm);
-            ctx.stroke();
-            offset += 2 * gp.genes[j].cost();
-        }
+    for (var i = 0; i < this.population.numagent; i++) {
+        this.drawAgent(ctx, this.population.agents[i], 10, 10 + 140 * i);
     }
 }
 
 // Fisher and Nutters simulation code below
 
 var contains = function (lst, obj) {
-    for (var i =0; i < lst.length; i++){
+    for (var i =0; lst != null && i < lst.length; i++){
         if(lst[i] === obj)
             return true;
     }
@@ -414,56 +441,162 @@ var Genome = function (genomesize, lengthmax, size, rewardmax) {
     this.rewardmax = rewardmax;
     this.generation = 0;
 
+    this.mins = [];
+    this.maxs = [];
+
     for(var i = 0; i < genomesize; i++){
         this.geneplexes.push(new Geneplex(lengthmax, size, rewardmax));
+    }
+    this.minmax(1);
+}
+
+Genome.prototype.minmax = function (num) {
+    this.mins = [];
+    this.maxs = [];
+
+    while (num > 0) {
+        var index = 0;
+        var maxdex = 0;
+        var min = this.lengthmax;
+        var max = 0
+
+        for (var i = 0; i < this.geneplexes.length; i++) {
+            if (contains(this.mins, this.geneplexes[i])) continue;
+            if (this.geneplexes[i].fitness() < min) {
+                min = this.geneplexes[i].fitness();
+                index = i;
+            }
+        }
+        for (var i = 0; i < this.geneplexes.length; i++) {
+            if (contains(this.maxs, this.geneplexes[i])) continue;
+            if (this.geneplexes[i].fitness() >= max) {
+                max = this.geneplexes[i].fitness();
+                maxdex = i;
+            }
+        }
+
+        this.geneplexes[index].index = index;
+        this.mins.push(this.geneplexes[index]);
+        this.maxs.push(this.geneplexes[maxdex]);
+        num--;
     }
 }
 
 Genome.prototype.mutate = function(rate) {
-    var mins = [];
     var firstrun = true;
     this.generation++;
+    this.minmax(rate);
     while (rate > 0) {
+        rate--;
         var index = Math.floor(Math.random() * this.genomesize);
         var gp = this.geneplexes[index].clone();
         gp.mutate();
         //console.log("Mutating index " + index);
 
-        var min = this.lengthmax;
-        var max = 0;
-        index = 0;
-
-        for (var i = 0; i < this.geneplexes.length; i++) {
-            if (contains(mins, i)) continue;
-            if (this.geneplexes[i].fitness() < min) {
-                min = this.geneplexes[i].fitness();
-                index = i;
-            }
-            if (this.geneplexes[i].fitness() > max) {
-                max = this.geneplexes[i].fitness();
-            }
-        }
-        this.geneplexes[index] = gp;
+        this.geneplexes[this.mins[rate].index] = gp;
         //console.log("Replacing index " + index + " Min " + min);
-        mins.push(index);
-
-        if (firstrun) {
-            this.minfitness = min;
-            this.maxfitness = max;
-            firstrun = false;
-        }
-        rate--;
     }
 }
 
-function Agent() {
+Genome.prototype.clone = function() {
+    var g = new Genome(this.genomesize, this.lengthmax, this.size, this.rewardmax);
 
+    g.geneplexes = [];
+
+    for (var i = 0; i < this.geneplexes.length; i++) {
+        g.geneplexes.push(this.geneplexes[i].clone());
+    }
+    g.minmax(1);
+    return g;
 }
 
-Agent.prototype.startDay = function (endDayCB) {
+function Agent(mutationrate, genomesize, lengthmax, size, rewardmax) {
+    this.genomesize = genomesize;
+    this.lengthmax = lengthmax;
+    this.size = size;
+    this.rewardmax = rewardmax;
+    this.mutationrate = mutationrate;
 
+    this.fitness = 0;
+    this.age = 0;
+
+    this.genome = new Genome(genomesize, lengthmax, size, rewardmax);
+    this.memome = this.genome.clone();
 }
 
+Agent.prototype.day = function () {
+    this.age++;
+
+    this.memome.minmax(1);
+    this.fitness += this.memome.maxs[0].fitness();
+    this.memome.mutate(this.mutationrate);
+}
+
+Agent.prototype.mutate = function () {
+    this.genome.mutate(this.mutationrate);
+    this.memome = this.genome.clone();
+}
+
+Agent.prototype.clone = function () {
+    var a = new Agent(this.mutationrate, this.genomesize, this.lengthmax, this.size, this.rewardmax);
+    a.genome = this.genome.clone();
+    a.memome = a.genome.clone();
+    return a;
+}
+
+function Population(numagent, mutationrate, genomesize, lengthmax, size, rewardmax) {
+    this.agents = [];
+    this.days = 0;
+
+    this.numagent = numagent;
+    this.mutationrate = mutationrate;
+    this.genomesize = genomesize;
+    this.lengthmax = lengthmax;
+    this.size = size;
+    this.rewardmax = rewardmax;
+
+    for (var i = 0; i < numagent; i++) {
+        var a = new Agent(this.mutationrate, this.genomesize, this.lengthmax, this.size, this.rewardmax);
+        this.agents.push(a);
+    }
+}
+
+Population.prototype.day = function () {
+    this.days++;
+    for (var i = 0; i < this.numagent; i++) {
+        this.agents[i].day();
+    }
+    if (this.days % 10 === 0) {
+        this.forum();
+    }
+    if (this.days % 30 === 0) {
+        this.mutate();
+    }
+}
+
+Population.prototype.forum = function () {
+    var g = new Genome(this.genomesize, this.lengthmax, this.size, this.rewardmax);
+    g.geneplexes = [];
+    for (var i = 0; i < this.agents.length; i++) {
+        //console.log(this.agents[i].memome.maxs);
+        this.agents[i].memome.minmax(this.mutationrate);
+        for (var j = 0; j < this.mutationrate; j++) {
+            var m = this.agents[i].memome.maxs[j].clone();
+            //console.log(m);
+            g.geneplexes.push(m);
+        }
+    }
+    g.minmax(this.mutationrate);
+    for (var i = 0; i < this.agents.length; i++) {
+        for (var j = 0; j < this.mutationrate; j++) {
+            this.agents[i].memome.geneplexes[this.agents[i].memome.mins[j].index] = g.maxs[j].clone();
+        }
+    }
+}
+
+Population.prototype.mutate = function () {
+    this.agents[(this.days/30) % this.agents.length].mutate();
+}
 
 var ASSET_MANAGER = new AssetManager();
 
@@ -477,13 +610,12 @@ ASSET_MANAGER.downloadAll(function () {
     var canvas = document.getElementById('gameWorld');
     var ctx = canvas.getContext('2d');
 
-    var g = new Genome(50, 100, 5, 3);
+    var p = new Population(4, 5, 50, 50, 5, 3);
 
     var gameEngine = new GameEngine();
-    var renderer = new Renderer(g);
+    var renderer = new Renderer(p);
 
     gameEngine.addEntity(renderer);
-
  
     //for (var i = 0; i < g.geneplexes.length; i++) {
     //    gp = g.geneplexes[i];
@@ -495,6 +627,7 @@ ASSET_MANAGER.downloadAll(function () {
     //        console.log(gp.genes[j].reward());
     //    }
     //}
+
     gameEngine.init(ctx);
     gameEngine.start();
 });
