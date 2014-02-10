@@ -191,10 +191,19 @@ Entity.prototype.rotateAndCache = function (image, angle) {
 // Fisher and Nutters code here
 // Fisher and Nutters Animation code below
 
+function download(filename, text) {
+    var pom = document.createElement('a');
+    pom.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+    pom.setAttribute('download', filename);
+    pom.click();
+}
+
 function Renderer(poplst) {
     this.pops = poplst;
     this.maxs = [];
     this.gmaxs = [];
+    this.run = 0;
+    this.batch = Math.floor(Math.random() * 100);
     for (var i = 0; i < this.pops.length; i++) {
         this.maxs.push([]);
         this.maxs[i].push(0);
@@ -209,8 +218,21 @@ Renderer.prototype = new Entity();
 Renderer.prototype.constructor = Renderer;
 
 Renderer.prototype.update = function () {
+    var str = "";
     for (var i = 0; i < this.pops.length; i++) {
         this.pops[i].day();
+        if (this.pops[i].days === 5000) {
+            str += this.maxs[i] + ",";
+            str += this.gmaxs[i] + ",";
+            this.pops[i] = new Population(this.pops[i].params);
+            this.maxs[i] = [];
+            this.gmaxs[i] = [];
+        }
+    }
+    if (str != "") {
+        //console.log(str);
+        download("b" + this.batch + "r" + this.run++ + ".txt", str);
+        str = "";
     }
     Entity.prototype.update.call(this);
 }
@@ -340,7 +362,7 @@ Renderer.prototype.draw = function (ctx) {
 
         ctx.beginPath();
         ctx.strokeStyle = i === 0 ? "red" : i === 1 ? "blue" : i === 2 ? "orange" : "purple";
-        ctx.moveTo(10 + 4 * gap, 1035);
+        ctx.moveTo(10 + 4 * gap, 990);
         var px = 0;
         for (var j = 0; j < g.length; j++) {
             if (g.length > 500 && j % Math.ceil(g.length / 500) != 0) continue;
