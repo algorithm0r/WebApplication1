@@ -221,16 +221,23 @@ Renderer.prototype.update = function () {
     var str = "";
     for (var i = 0; i < this.pops.length; i++) {
         this.pops[i].day();
-        if (this.pops[i].days === 5000) {
-            str += this.maxs[i] + ",";
-            str += this.gmaxs[i] + ",";
-            this.pops[i] = new Population(this.pops[i].params);
-            this.maxs[i] = [];
-            this.gmaxs[i] = [];
-        }
     }
-    if (str != "") {
-        //console.log(str);
+    if (this.pops[0].days === 50000) {
+        for (var i = 0; i < this.pops.length; i++) {
+            for (var j = 0; j < this.maxs[i].length; j++) {
+                str += this.maxs[i][j] + "\n";
+            }
+        }
+        for (var i = 0; i < this.pops.length; i++) {
+            for (var j = 0; j < this.maxs[i].length; j++) {
+                str += this.gmaxs[i][j] + "\n";
+            }
+        }
+        for (var i = 0; i < this.pops.length; i++) {
+                this.pops[i] = new Population(this.pops[i].params);
+                this.maxs[i] = [];
+                this.gmaxs[i] = [];
+        }
         download("b" + this.batch + "r" + this.run++ + ".txt", str);
         str = "";
     }
@@ -317,9 +324,10 @@ Renderer.prototype.drawPop = function(ctx, pop,index, x, y) {
         if (i < Math.floor(938 / 70)) this.drawAgent(ctx, pop.agents[i], x, y + 52 + 70 * i);
     }
 
-    this.maxs[index].push(max);
-    this.gmaxs[index].push(gmax);
-
+    if (pop.days % 20 == 0) {
+        this.maxs[index].push(max);
+        this.gmaxs[index].push(gmax);
+    }
     //ctx.font = "18px Arial";
     //ctx.fillStyle = "black";
     //ctx.fillText("Day " + pop.days, 610, 150);
@@ -682,8 +690,8 @@ Population.prototype.minmax = function (num) {
         var max = 0;
         for (var i = 0; i < this.agents.length; i++) {
             if (contains(this.mins, this.agents[i])) continue;
-            if (this.agents[i].fitness / this.agents[i].age - this.agents[i].age < min) {
-                min = this.agents[i].fitness / this.agents[i].age - this.agents[i].age;
+            if (this.agents[i].fitness / this.agents[i].age - this.agents[i].age / 3 < min) {
+                min = this.agents[i].fitness / this.agents[i].age - this.agents[i].age / 3;
                 index = i;
             }
         }
@@ -744,7 +752,9 @@ Population.prototype.forum = function () {
 Population.prototype.mutate = function () {
     if (this.params.generationtime == null) return;
     while (this.births < this.days / this.params.generationtime * this.agents.length) {
-        this.minmax(this.params.mutationrate);
+        var newbirths = this.agents.length * this.days / this.params.generationtime - this.births;
+        this.minmax(newbirths);
+        if (this.mins.length === 0) break;
         for (var i = 0; i < this.mins.length; i++) {
             var rindex = Math.floor(Math.random()*this.agents.length);
             var na = this.agents[rindex].clone();
@@ -752,8 +762,8 @@ Population.prototype.mutate = function () {
             this.deathage += this.agents[this.mins[i].index].age;
             this.agents[this.mins[i].index] = na;
             this.deaths++;
+            this.births++;
         }
-        this.births++;
     }
 }
 
@@ -807,17 +817,17 @@ ASSET_MANAGER.downloadAll(function () {
     fnn.learning = true;
     p.push(new Population(fnn));
 
-    fnn = {};
-    fnn.numagent = 1;
-    fnn.genomesize = 50;
-    fnn.lengthmax = 50;
-    fnn.mutationrate = 5;
-    fnn.permsize = 5;
-    fnn.rewardmax = 3;
-    fnn.socialrate = 0;
-    fnn.generationtime = null;
-    fnn.learning = true;
-    p.push(new Population(fnn));
+    //fnn = {};
+    //fnn.numagent = 1;
+    //fnn.genomesize = 50;
+    //fnn.lengthmax = 50;
+    //fnn.mutationrate = 5;
+    //fnn.permsize = 5;
+    //fnn.rewardmax = 3;
+    //fnn.socialrate = 0;
+    //fnn.generationtime = null;
+    //fnn.learning = true;
+    //p.push(new Population(fnn));
 
     var gameEngine = new GameEngine();
     var renderer = new Renderer(p);
