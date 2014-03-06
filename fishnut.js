@@ -199,9 +199,14 @@ function download(filename, text) {
 }
 
 function Renderer(poplst) {
+    this.days = 10000;
+    this.resolution = this.days / 500;
+
     this.pops = poplst;
     this.maxs = [];
     this.gmaxs = [];
+    this.histograms = [];
+    this.ghistograms = [];
     this.run = 0;
     this.batch = Math.floor(Math.random() * 100);
     for (var i = 0; i < this.pops.length; i++) {
@@ -209,6 +214,14 @@ function Renderer(poplst) {
         this.maxs[i].push(0);
         this.gmaxs.push([]);
         this.gmaxs[i].push(0);
+        this.histograms.push([]);
+        this.ghistograms.push([]);
+        for (var j = 0; j < 3; j++) {
+            this.histograms[i].push([]);
+            this.histograms[i][j].push(0);
+            this.ghistograms[i].push([]);
+            this.ghistograms[i][j].push(0);
+        }
     }
 
     Entity.call(this, null, 0, 0);
@@ -222,21 +235,39 @@ Renderer.prototype.update = function () {
     for (var i = 0; i < this.pops.length; i++) {
         this.pops[i].day();
     }
-    if (this.pops[0].days === 50000) {
+    if (this.pops[0].days === this.days) {
         for (var i = 0; i < this.pops.length; i++) {
             for (var j = 0; j < this.maxs[i].length; j++) {
-                str += this.maxs[i][j] + "\n";
+                str += this.maxs[i][j] + "\r\n";
             }
         }
         for (var i = 0; i < this.pops.length; i++) {
-            for (var j = 0; j < this.maxs[i].length; j++) {
-                str += this.gmaxs[i][j] + "\n";
+            for (var j = 0; j < this.gmaxs[i].length; j++) {
+                str += this.gmaxs[i][j] + "\r\n";
+            }
+        }
+        for (var i = 0; i < this.pops.length; i++) {
+            for (var k = 0; k < 3; k++) {
+                for (var j = 0; j < this.histograms[i][k].length; j++) {
+                    str += this.histograms[i][k][j] + "\r\n";
+                }
+            }
+        }
+        for (var i = 0; i < this.pops.length; i++) {
+            for (var k = 0; k < 3; k++) {
+                for (var j = 0; j < this.ghistograms[i][k].length; j++) {
+                    str += this.ghistograms[i][k][j] + "\r\n";
+                }
             }
         }
         for (var i = 0; i < this.pops.length; i++) {
                 this.pops[i] = new Population(this.pops[i].params);
                 this.maxs[i] = [];
                 this.gmaxs[i] = [];
+                for (var k = 0; k < 3; k++) {
+                    this.histograms[i][k] = [];
+                    this.ghistograms[i][k] = [];
+                }
         }
         download("b" + this.batch + "r" + this.run++ + ".txt", str);
         str = "";
@@ -249,7 +280,8 @@ Renderer.prototype.drawGeneplex = function (ctx, gp, x, y) {
     //console.log(gp.genes[0].cost());
     for (var j = 0; j < gp.genes.length; j++) {
         ctx.beginPath();
-        ctx.strokeStyle = gp.genes[j].reward() === 3 ? "red" : gp.genes[j].reward() === 2 ? "blue" : "grey";
+        //ctx.strokeStyle = "Black";
+        ctx.strokeStyle = gp.genes[j].type == "Breed" ? "red" : gp.genes[j].type == "Learn" ? "blue" : gp.genes[j].type == "Gossip" ? "orange" : "grey";
         ctx.rect(x + offset, y, 3 * gp.genes[j].cost(), 3);
         //console.log("Gene " + j + " Cost " + gp.genes[j].cost() + " Game " + gp.genes[j].minigame.perm.perm + " Attempt " + gp.genes[j].perm.perm);
         ctx.stroke();
@@ -289,24 +321,47 @@ Renderer.prototype.drawAgent = function (ctx, agent, x, y) {
 
     ctx.beginPath();
     ctx.strokeStyle = "purple";
-    ctx.rect(x - 3, y, 1, 1 * agent.fitness / (agent.age > 0 ? agent.age : 1));
+    ctx.rect(x, y, 3 * agent.memome.maxs[0].fitness(), 1);
     ctx.stroke();
 
-    this.drawGenome(ctx, agent.memome, x, y);
-    this.drawGenome(ctx, agent.genome, x, y);
-    this.drawGeneplex(ctx, agent.genome.mins[0], x, y + 52)
-    this.drawGeneplex(ctx, agent.genome.maxs[0], x, y + 56);
-    this.drawGeneplex(ctx, agent.memome.mins[0], x, y + 60)
-    this.drawGeneplex(ctx, agent.memome.maxs[0], x, y + 64);
+    //this.drawGenome(ctx, agent.memome, x, y);
+    //this.drawGenome(ctx, agent.genome, x, y);
+    //this.drawGeneplex(ctx, agent.genome.mins[0], x, y + 52)
+    this.drawGeneplex(ctx, agent.genome.maxs[0], x, y + 2);
+    //this.drawGeneplex(ctx, agent.memome.mins[0], x, y + 60)
+    this.drawGeneplex(ctx, agent.memome.maxs[0], x, y + 5);
 }
 
-Renderer.prototype.drawPop = function(ctx, pop,index, x, y) {
+Renderer.prototype.drawPop = function (ctx, pop, index, x, y) {
     var ages = 0;
     var min = pop.params.lengthmax + 1;
     var max = 0;
     var gmin = pop.params.lengthmax + 1;
     var gmax = 0;
 
+    var sum = /*pop.histogram[0] + pop.histogram[1] + pop.histogram[2] +*/ pop.histogram[3] + pop.histogram[4] + pop.histogram[5];
+    var gsum = /*pop.ghistogram[0] + pop.ghistogram[1] + pop.ghistogram[2] +*/ pop.ghistogram[3] + pop.ghistogram[4] + pop.ghistogram[5];
+
+    for (var j = 3; j < pop.ghistogram.length; j++) {
+        ctx.beginPath();
+        ctx.strokeStyle = j === 3 ? "red" : j === 4 ? "blue" : j === 5 ? "orange" : "lightgrey";
+        ctx.rect(x, y + 52 + (j - 3) * 3, pop.ghistogram[j] / 2, 1);
+        ctx.stroke();
+
+        if (pop.days % this.resolution == 0) {
+            this.ghistograms[index][j-3].push(pop.ghistogram[j]);
+        }
+    }
+    for (var j = 3; j < pop.histogram.length; j++) {
+        ctx.beginPath();
+        ctx.strokeStyle = j === 3 ? "red" : j === 4 ? "blue" : j === 5 ? "orange" : "lightgrey";
+        ctx.rect(x, y + 55 + j  * 3, pop.histogram[j] / 2, 1);
+        ctx.stroke();
+
+        if (pop.days % this.resolution == 0) {
+            this.histograms[index][j-3].push(pop.histogram[j]);
+        }
+    }
     // draw genome
     //console.log(pop.agents[0].genome.mins[0].fitness());
     for (var i = 0; i < pop.agents.length; i++) {
@@ -315,16 +370,17 @@ Renderer.prototype.drawPop = function(ctx, pop,index, x, y) {
         ctx.rect(x + i * 3, y, 1, 1 * (pop.agents[i].age == 0 ? 0 : pop.agents[i].fitness / pop.agents[i].age));
         ctx.stroke();
 
+
         ages += pop.agents[i].age;
         gmin = pop.agents[i].genome.mins[0].fitness() < min ? pop.agents[i].genome.mins[0].fitness() : gmin;
-        gmax = pop.agents[i].genome.mins[0].fitness() > max ? pop.agents[i].genome.maxs[0].fitness() : gmax;
+        gmax = pop.agents[i].genome.maxs[0].fitness() > max ? pop.agents[i].genome.maxs[0].fitness() : gmax;
         min = pop.agents[i].memome.mins[0].fitness() < min ? pop.agents[i].memome.mins[0].fitness() : min;
-        max = pop.agents[i].memome.mins[0].fitness() > max ? pop.agents[i].memome.maxs[0].fitness() : max;
+        max = pop.agents[i].memome.maxs[0].fitness() > max ? pop.agents[i].memome.maxs[0].fitness() : max;
 
-        if (i < Math.floor(938 / 70)) this.drawAgent(ctx, pop.agents[i], x, y + 52 + 70 * i);
+        if (i < Math.floor(915 / 11)) this.drawAgent(ctx, pop.agents[i], x, y + 75 + 11 * i);
     }
 
-    if (pop.days % 20 == 0) {
+    if (pop.days % this.resolution == 0) {
         this.maxs[index].push(max);
         this.gmaxs[index].push(gmax);
     }
@@ -348,35 +404,79 @@ Renderer.prototype.draw = function (ctx) {
     ctx.fillText("Biological", 10, 25);
     ctx.fillText("Learners", 10 + gap, 25);
     ctx.fillText("Socializers", 10 + 2 * gap, 25);
-    ctx.fillText("Immortal", 10 + 3 * gap, 25);
-    ctx.fillText("Day " + this.pops[0].days, 10 + 4 * gap, 25);
+    ctx.fillText("Day " + this.pops[0].days, 10 + 3 * gap, 25);
 
     for (var i = 0; i < this.pops.length; i++) {
         this.drawPop(ctx, this.pops[i], i, 10 + gap * i, 35);
     }
 
+    for (var i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.strokeStyle = "Silver";
+        ctx.fillStyle = i === 0 ? "WhiteSmoke" : i === 1 ? "SeaShell" : i === 2 ? "AliceBlue" : "Ivory";
+        ctx.fillRect(10 + 3 * gap, 34 + 60 * i, 502, 52);
+        ctx.rect(10 + 3 * gap, 34 + 60 * i, 502, 52);
+        ctx.stroke();
+    }
+
+    for (var i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.strokeStyle = "Silver";
+        ctx.fillStyle = i === 0 ? "WhiteSmoke" : i === 1 ? "SeaShell" : i === 2 ? "AliceBlue" : "Ivory";
+        ctx.fillRect(10 + 3 * gap, 274 + 60 * i, 502, 52);
+        ctx.rect(10 + 3 * gap, 274 + 60 * i, 502, 52);
+        ctx.stroke();
+    }
+
     for (var i = 0; i < this.maxs.length; i++) {
         var m = this.maxs[i];
         var g = this.gmaxs[i];
-        ctx.beginPath();
-        ctx.strokeStyle = i === 0 ? "red" : i === 1 ? "blue" : i === 2 ? "orange" : "purple";
-        ctx.moveTo(10 + 4 * gap, 535);
-        var px = 0;
-        for (var j = 0; j < m.length; j++) {
-            if (m.length > 500 && j % Math.ceil(m.length / 500) != 0) continue;
-            ctx.lineTo(10 + 4 * gap + ++px, 535 - m[j] * 10);
-        }
-        ctx.stroke();
+        var h = this.histograms[i];
+        var gh = this.ghistograms[i];
 
         ctx.beginPath();
         ctx.strokeStyle = i === 0 ? "red" : i === 1 ? "blue" : i === 2 ? "orange" : "purple";
-        ctx.moveTo(10 + 4 * gap, 990);
+        ctx.moveTo(10 + 3 * gap, 85);
+        var px = 0;
+        for (var j = 0; j < m.length; j++) {
+            if (m.length > 500 && j % Math.ceil(m.length / 500) != 0) continue;
+            ctx.lineTo(10 + 3 * gap + ++px, 85 - m[j]);
+        }
+        ctx.stroke();
+
+        for (var k = 0; k < 3; k++) {
+            ctx.beginPath();
+            ctx.strokeStyle = k === 0 ? "red" : k === 1 ? "blue" : k === 2 ? "orange" : "purple";
+            ctx.moveTo(10 + 3 * gap, 145 + i*60);
+            var px = 0;
+            for (var j = 0; j < h[k].length; j++) {
+                if (h[k].length > 500 && j % Math.ceil(h[k].length / 500) != 0) continue;
+                ctx.lineTo(10 + 3 * gap + ++px, 145 + i * 60 - h[k][j]/3);
+            }
+            ctx.stroke();
+        }
+
+        ctx.beginPath();
+        ctx.strokeStyle = i === 0 ? "red" : i === 1 ? "blue" : i === 2 ? "orange" : "purple";
+        ctx.moveTo(10 + 3 * gap, 325);
         var px = 0;
         for (var j = 0; j < g.length; j++) {
             if (g.length > 500 && j % Math.ceil(g.length / 500) != 0) continue;
-            ctx.lineTo(10 + 4 * gap + ++px, 990 - g[j] * 9);
+            ctx.lineTo(10 + 3 * gap + ++px, 325 - g[j]);
         }
         ctx.stroke();
+
+        for (var k = 0; k < 3; k++) {
+            ctx.beginPath();
+            ctx.strokeStyle = k === 0 ? "red" : k === 1 ? "blue" : k === 2 ? "orange" : "purple";
+            ctx.moveTo(10 + 3 * gap, 385 + i * 60);
+            var px = 0;
+            for (var j = 0; j < gh[k].length; j++) {
+                if (gh[k].length > 500 && j % Math.ceil(gh[k].length / 500) != 0) continue;
+                ctx.lineTo(10 + 3 * gap + ++px, 385 + i * 60 - gh[k][j] / 3);
+            }
+            ctx.stroke();
+        }
     }
 }
 
@@ -471,24 +571,42 @@ Minigame.prototype.clone = function () {
 }
 
 var Gene = function (minigame, perm) {
+    if (minigame == null) {
+        var i = Math.floor(Math.random() * 3);
+        if (i == 0) {
+            this.type = "Breed";
+        }
+        else if (i == 1) {
+            this.type = "Learn";
+        }
+        else {
+            this.type = "Gossip";
+        }
+    }
+    else this.type = "Gather";
     this.minigame = minigame;
     this.perm = perm;
 }
 
 Gene.prototype.cost = function () {
-    return this.minigame.play(this.perm);
+    if (this.minigame != null) return this.minigame.play(this.perm);
+    return 1;
 }
 
 Gene.prototype.reward = function () {
-    return this.minigame.reward;
+    if (this.minigame != null) return this.minigame.reward;
+    return 0.01;
 }
 
 Gene.prototype.mutate = function () {
-    this.perm.mutate();
+    if (this.perm != null) this.perm.mutate();
 }
 
 Gene.prototype.clone = function () {
-    return new Gene(this.minigame.clone(), this.perm.clone());
+    if (this.minigame != null) return new Gene(this.minigame.clone(), this.perm.clone());
+    var g = new Gene();
+    g.type = this.type;
+    return g;
 }
 
 var Geneplex = function (params) {
@@ -503,14 +621,27 @@ Geneplex.prototype.mutate = function (){
         // mutate a random gene in the list
         var index = Math.floor(Math.random()*this.genes.length);
         this.genes[index].mutate();
-        if(this.length() > this.params.lengthmax){
-            this.genes.splice(index,1);
+        if (this.length() > this.params.lengthmax) {
+            this.genes.splice(index, 1);
+        }
+        else {
+            var bit = Math.floor(Math.random() * 2);
+            if (this.genes[index].type != "Gather" && bit === 1) {
+                this.genes.splice(index, 1);
+            }
         }
     }
     else {
         // grow a new gene
-        var reward = Math.floor(Math.random() * this.params.rewardmax + 1)
-        this.genes.push(new Gene(new Minigame(this.params.permsize, reward, reward == 1 ? "FISH" : "NUTS"), new Perm(this.params.permsize)));
+        var bit = Math.floor(Math.random() * 2);
+        if(bit === 1) {
+            var reward = Math.floor(Math.random() * this.params.rewardmax + 1)
+            this.genes.push(new Gene(new Minigame(this.params.permsize, reward, reward == 1 ? "FISH" : "NUTS"), new Perm(this.params.permsize)));
+        }
+        else {
+            // breed, learn or gossip
+            this.genes.push(new Gene());
+        }
         while (this.length() > this.params.lengthmax) {
             this.genes.pop();
         }
@@ -539,6 +670,7 @@ Geneplex.prototype.fitness = function () {
     for (var i = 0; i < this.genes.length; i++) {
         fitness += this.genes[i].reward();
     }
+    fitness += (50 - this.length())*0.01;
     return fitness;
 }
 
@@ -583,6 +715,7 @@ Genome.prototype.minmax = function (num) {
 
         this.geneplexes[index].min = true;
         this.geneplexes[index].index = index;
+        this.geneplexes[maxdex].index = maxdex;
         this.mins.push(this.geneplexes[index]);
         this.maxs.push(this.geneplexes[maxdex]);
         num--;
@@ -595,8 +728,8 @@ Genome.prototype.mutate = function() {
     this.minmax(rate);
     while (rate > 0) {
         rate--;
-        var index = Math.floor(Math.random() * this.geneplexes.length);
-        var gp = this.geneplexes[index].clone();
+        //var index = Math.floor(Math.random() * this.geneplexes.length);
+        var gp = this.geneplexes[this.maxs[rate].index].clone();
         gp.mutate();
         //console.log("Mutating index " + index);
 
@@ -626,7 +759,7 @@ function Agent(params) {
     this.memome = this.genome.clone();
 }
 
-Agent.prototype.day = function () {
+Agent.prototype.day = function (learn) {
     this.age++;
 
     this.memome.minmax(1);
@@ -635,7 +768,10 @@ Agent.prototype.day = function () {
     // display max meme's phenotype
     this.fitness += this.memome.maxs[0].fitness();
     //console.log(this.memome);
-    if (this.params.learning) this.memome.mutate();
+    while (this.params.learning && learn > 0) {
+        this.memome.mutate();
+        learn--;
+    }
 }
 
 Agent.prototype.mutate = function () {
@@ -660,6 +796,8 @@ function Population(params) {
     this.births = 0;
     this.deaths = 0;
     this.deathage = 0;
+    this.histogram = [0, 0, 0, 0, 0, 0];
+    this.ghistogram = [0, 0, 0, 0, 0, 0];
 
     this.mins = [];
     this.maxs = [];
@@ -672,11 +810,58 @@ function Population(params) {
 
 Population.prototype.day = function () {
     this.days++;
+    var breedTickets = [];
+    var gossipTickets = [];
+    var learn = 0;
+
+    this.histogram = [0, 0, 0, 0, 0, 0];
+    this.ghistogram = [0, 0, 0, 0, 0, 0];
+
     for (var i = 0; i < this.agents.length; i++) {
-        this.agents[i].day();
+        learn = 0;
+        var agent = this.agents[i];
+        agent.memome.minmax(1);
+        agent.genome.minmax(1);
+        var memeplex = agent.memome.maxs[0];
+        var geneplex = agent.genome.maxs[0];
+        // ticketing
+        var fit = Math.floor(memeplex.fitness() / 5);
+        while (fit-- > 0) breedTickets.push(i);
+        for (var j = 0; j < memeplex.genes.length; j++) {
+            if (memeplex.genes[j].type === "Gather") {
+                this.histogram[memeplex.genes[j].reward() - 1]++;
+            }
+            if (memeplex.genes[j].type === "Breed") {
+                breedTickets.push(i);
+                this.histogram[3]++;
+            }
+            if (memeplex.genes[j].type === "Learn") {
+                learn++;
+                this.histogram[4]++;
+            }
+            if (memeplex.genes[j].type === "Gossip") {
+                gossipTickets.push(i);
+                this.histogram[5]++;
+            }
+        }
+        for (var j = 0; j < geneplex.genes.length; j++) {
+            if (geneplex.genes[j].type === "Gather") {
+                this.ghistogram[geneplex.genes[j].reward() - 1]++;
+            }
+            if (geneplex.genes[j].type === "Breed") {
+               this.ghistogram[3]++;
+            }
+            if (geneplex.genes[j].type === "Learn") {
+                 this.ghistogram[4]++;
+            }
+            if (geneplex.genes[j].type === "Gossip") {
+                 this.ghistogram[5]++;
+            }
+        }
+        agent.day(learn);
     }
-    this.mutate();
-    if (this.days % 1 === 0) this.forum();
+    this.mutate(breedTickets);
+    this.forum(gossipTickets);
 }
 
 Population.prototype.minmax = function (num) {
@@ -690,8 +875,8 @@ Population.prototype.minmax = function (num) {
         var max = 0;
         for (var i = 0; i < this.agents.length; i++) {
             if (contains(this.mins, this.agents[i])) continue;
-            if (this.agents[i].fitness / this.agents[i].age - this.agents[i].age / 3 < min) {
-                min = this.agents[i].fitness / this.agents[i].age - this.agents[i].age / 3;
+            if (this.agents[i].fitness / this.agents[i].age - this.agents[i].age / 4 < min) {
+                min = this.agents[i].fitness / this.agents[i].age - this.agents[i].age / 4;
                 index = i;
             }
         }
@@ -714,12 +899,12 @@ Population.prototype.minmax = function (num) {
     }
 }
 
-Population.prototype.forum = function () {
-    if (this.params.socialrate === 0) return;
+Population.prototype.forum = function (tickets) {
+    if (this.params.socialrate === 0 || tickets.length === 0) return;
     var agents = [];
     for (var i = 0; i < this.params.socialrate; i++) {
-        var agent = this.agents[Math.floor(Math.random()*this.agents.length)];
-        while (contains(agents, agent)) agent = this.agents[Math.floor(Math.random() * this.agents.length)];
+        var agent = this.agents[tickets[Math.floor(Math.random()*tickets.length)]];
+        //while (contains(agents, agent)) agent = this.agents[tickets[Math.floor(Math.random() * tickets.length)]];
         agents.push(agent);
     }
     var g = new Genome(this.params);
@@ -749,14 +934,16 @@ Population.prototype.forum = function () {
     }
 }
 
-Population.prototype.mutate = function () {
+Population.prototype.mutate = function (tickets) {
     if (this.params.generationtime == null) return;
     while (this.births < this.days / this.params.generationtime * this.agents.length) {
         var newbirths = this.agents.length * this.days / this.params.generationtime - this.births;
         this.minmax(newbirths);
         if (this.mins.length === 0) break;
         for (var i = 0; i < this.mins.length; i++) {
-            var rindex = Math.floor(Math.random()*this.agents.length);
+            var rindex;
+            if (tickets.length == 0) rindex = Math.floor(Math.random() * this.agents.length);
+            else rindex = tickets[Math.floor(Math.random() * tickets.length)];
             var na = this.agents[rindex].clone();
             na.mutate();
             this.deathage += this.agents[this.mins[i].index].age;
